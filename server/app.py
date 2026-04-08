@@ -121,7 +121,7 @@ class ResetRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.post("/reset", tags=["env"])
-async def reset_episode(request_body: ResetRequest):
+async def reset_episode(request_body: ResetRequest = ResetRequest()):
     """
     Start a new episode for the specified task.
 
@@ -130,12 +130,16 @@ async def reset_episode(request_body: ResetRequest):
         {"task_id": "task2"}   medium -- Resource Optimization
         {"task_id": "task3"}   hard   -- Strategic Planning
 
+    If the body is missing or empty, defaults to task1.
+
     Returns a FinOpsObservation with full resource list, dependency graph,
     SLA status, and the episode goal.
     """
     env = _get_env()
     try:
-        obs = env.reset(task_id=request_body.task_id)
+        # If task_id was not provided in JSON but object exists, use its default
+        task_id = request_body.task_id if request_body else "task1"
+        obs = env.reset(task_id=task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
