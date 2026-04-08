@@ -125,18 +125,14 @@ class ResetRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.post("/reset", tags=["env"])
-async def reset_episode(request: Request):
+async def reset_episode(request: Request, body: dict = Body(None)):
     """
     Start a new episode for the specified task.
     Defaults to task1 if no JSON body or task_id provided.
     """
     task_id = "task1"
-    try:
-        body = await request.json()
-        if body and isinstance(body, dict):
-            task_id = body.get("task_id", "task1")
-    except Exception:
-        pass
+    if body and isinstance(body, dict):
+        task_id = body.get("task_id", "task1")
 
     env = getattr(request.state, "env", None) or _env
     try:
@@ -206,18 +202,9 @@ async def list_tasks():
 # ---------------------------------------------------------------------------
 
 @app.post("/simulate", tags=["tools"])
-async def simulate_action(request: Request):
+async def simulate_action(request: Request, body: dict = Body(None)):
     """
     Project the outcome of a proposed action without mutating environment state.
-
-    Body (same format as a /step action):
-        {"action_type": "terminate", "resource_id": "ebs-001"}
-        {"action_type": "resize",    "resource_id": "ec2-t01", "target_size": "t2.medium"}
-        {"action_type": "reserve",   "resource_id": "ec2-h01"}
-
-    Returns SimulateResult:
-        projected_cost_per_hour, projected_budget_remaining, projected_reward,
-        projected_sla_violations, cascading_risks, recommendation, safe_to_apply
     """
     env = _get_env()
     if not env.state.task_id:
@@ -225,8 +212,7 @@ async def simulate_action(request: Request):
             status_code=400,
             detail="No active episode. Call /reset first.",
         )
-    body = await request.json()
-    result = env._simulate(body)
+    result = env._simulate(body or {})
     try:
         return JSONResponse(content=result.model_dump())
     except AttributeError:
