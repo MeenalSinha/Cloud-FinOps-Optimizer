@@ -449,7 +449,11 @@ class CloudFinOpsEnvironment(Environment):
         sla_violations       = sum(1 for r in self._resources if r.sla_status == SLAStatus.VIOLATED)
 
         base  = correctly_terminated / len(waste_ids) if waste_ids else 1.0
-        score = max(0.0, min(1.0, base - 0.25 * critical_terminated - 0.05 * sla_violations))
+        score = base - 0.25 * critical_terminated - 0.05 * sla_violations
+        
+        # Phase 2 Strict Constraint: strictly between 0 and 1
+        score = max(0.01, min(0.99, score))
+        
         return {
             "score":                round(score, 4),
             "waste_resources":      len(waste_ids),
@@ -477,7 +481,11 @@ class CloudFinOpsEnvironment(Environment):
         sla_violations      = sum(1 for r in self._resources if r.sla_status == SLAStatus.VIOLATED)
 
         base  = correctly_resized / len(overprovisioned) if overprovisioned else 1.0
-        score = max(0.0, min(1.0, base - 0.25 * critical_terminated - 0.05 * sla_violations))
+        score = base - 0.25 * critical_terminated - 0.05 * sla_violations
+        
+        # Phase 2 Strict Constraint: strictly between 0 and 1
+        score = max(0.01, min(0.99, score))
+        
         return {
             "score":                    round(score, 4),
             "overprovisioned_resources": len(overprovisioned),
@@ -503,7 +511,11 @@ class CloudFinOpsEnvironment(Environment):
             needed = initial - budget
             base   = min(1.0, max(0.0, (initial - current_cost) / needed)) if needed > 0 else 1.0
 
-        score = max(0.0, min(1.0, base - 0.30 * critical_terminated - 0.05 * sla_violations))
+        score = base - 0.30 * critical_terminated - 0.05 * sla_violations
+        
+        # Phase 2 Strict Constraint: strictly between 0 and 1
+        score = max(0.01, min(0.99, score))
+        
         return {
             "score":                  round(score, 4),
             "initial_cost_per_hour":  round(initial, 4),
