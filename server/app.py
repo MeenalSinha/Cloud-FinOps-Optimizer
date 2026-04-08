@@ -110,10 +110,12 @@ async def _sync_env_middleware(request: Request, call_next):
             pass
             
     # 2. GLOBAL SCORE CLAMP: Ensure any "score" field in ANY JSON response is strictly (0, 1)
-    # We use (0.05, 0.95) for maximum safety to satisfy the "not 0.0 and not 1.0" check.
+    # Exclude admin/UI paths to prevent 500s or performance issues
+    if request.url.path in ("/web", "/docs", "/openapi.json", "/health"):
+        return response
+
     if "application/json" in response.headers.get("content-type", ""):
         try:
-            # We must process the response body
             import json
             body_parts = []
             async for chunk in response.body_iterator:
@@ -135,16 +137,18 @@ async def _sync_env_middleware(request: Request, call_next):
                             clamp_scores(item)
                 
                 clamp_scores(content)
-                new_body = json.dumps(content).encode("utf-8")
                 
-                # Rebuild response
+                # REBUILD HEADERS: Must remove content-length so JSONResponse can recalculate it
+                new_headers = dict(response.headers)
+                new_headers.pop("content-length", None)
+                
                 return JSONResponse(
                     content=content,
                     status_code=response.status_code,
-                    headers=dict(response.headers)
+                    headers=new_headers
                 )
         except Exception:
-            pass # Fallback to original response if parsing fails
+            pass # Fallback to original response on any failure
 
     return response
 
