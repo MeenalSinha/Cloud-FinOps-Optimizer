@@ -1,0 +1,166 @@
+name: cloud-finops-optimizer
+version: "2.0.0"
+description: >
+  A production-grade OpenEnv environment where an AI agent acts as a Cloud
+  FinOps Engineer. The agent reduces cloud costs safely using a full 3-tier
+  dependency graph, SLA performance constraints, temporal action effects,
+  explainability scoring, and a what-if simulation mode — without breaking
+  mission-critical systems.
+
+author: cloud-finops-optimizer
+license: MIT
+tags:
+  - openenv
+  - finops
+  - cloud
+  - cost-optimization
+  - reinforcement-learning
+  - dependency-graph
+  - sla
+  - explainability
+
+# Required by openenv validate
+entry_point: server.app:app
+client: client.FinOpsEnv
+
+tasks:
+  - id: task1
+    name: Waste Cleanup
+    difficulty: easy
+    description: >
+      Terminate all idle EBS/S3 resources (cpu=0, idle_hours>0).
+      Dependency graph is present — do not break production chains.
+    max_steps: 12
+    budget_per_hour: 1.00
+    grader: deterministic
+    score_range: [0.0, 1.0]
+
+  - id: task2
+    name: Resource Optimization with SLA
+    difficulty: medium
+    description: >
+      Resize over-provisioned EC2 instances (cpu<20%) without violating SLA
+      cpu caps (sla_max_cpu). Resizes take 2 steps to stabilise (cooldown).
+      Dependency chain: batch-workers -> api-servers -> prod-apps.
+    max_steps: 16
+    budget_per_hour: 0.80
+    grader: deterministic
+    score_range: [0.0, 1.0]
+
+  - id: task3
+    name: Strategic Planning — Full System
+    difficulty: hard
+    description: >
+      Navigate a 10-resource environment with a 3-tier dependency chain
+      (frontend->backend->db), tight SLA constraints, and permanent
+      reservation commitments. Use simulate to reason before acting.
+      Bring total spend below $1.00/hr without SLA breaches.
+    max_steps: 20
+    budget_per_hour: 1.00
+    grader: deterministic
+    score_range: [0.0, 1.0]
+
+unique_mechanics:
+  - name: Dependency Graph (Upgrade 1)
+    description: >
+      Resources declare dependency_ids. Terminating a resource that others
+      depend on triggers cascade failure (-0.20 per affected resource).
+      dependency_graph and cascading_risks are exposed in every observation.
+
+  - name: SLA Performance Constraints (Upgrade 2)
+    description: >
+      Each resource has sla_max_cpu and sla_uptime_pct. Resizing a loaded
+      instance projects new CPU via capacity model; if projected CPU exceeds
+      sla_max_cpu the action triggers SLA violation (-0.20) and is counted
+      against the grade. Resources have sla_status: ok / at_risk / violated.
+
+  - name: Temporal Action Effects (Upgrade 3)
+    description: >
+      Resize has a 2-step cooldown (resize_cooldown_steps). During cooldown
+      the resource is marked at_risk. Reservation is permanently committed
+      (reservation_committed=true) — it cannot be undone.
+
+  - name: Explainability Score (Upgrade 4)
+    description: >
+      The agent can include a "reasoning" field in any action. The grader
+      scores reasoning quality (coverage, depth, keyword relevance) and adds
+      up to +0.05 bonus to the episode score. Encourages interpretable agents.
+
+  - name: What-If Simulation Mode (Upgrade 5)
+    description: >
+      action_type "simulate" returns a SimulateResult with projected cost,
+      projected reward, SLA violations, cascade risks, and a plain-English
+      recommendation — all without mutating environment state. Also available
+      as POST /simulate for direct HTTP access.
+
+observation_space:
+  type: object
+  description: FinOpsObservation (Pydantic, inherits openenv Observation)
+  fields:
+    done: boolean
+    reward: "float | null"
+    resources: array[CloudResource]
+    total_cost_per_hour: float
+    budget_per_hour: float
+    budget_remaining: float
+    task_id: string
+    task_description: string
+    goal: string
+    last_action_error: "string | null"
+    dependency_graph: "dict[resource_id -> list[dependency_ids]]"
+    cascading_risks:  "dict[resource_id -> list[dependent_ids]]"
+    sla_violations:   "list[resource_id]"
+    simulate_result:  "SimulateResult | null"
+    step_count: integer
+    max_steps: integer
+    info: object
+
+action_space:
+  type: object
+  description: FinOpsAction (Pydantic, inherits openenv Action)
+  fields:
+    action_type: "terminate | resize | reserve | simulate | noop"
+    resource_id: "string | null"
+    target_size: "string | null"
+    simulate_action: "dict | null"
+    reasoning: "string | null"
+  examples:
+    simulate:  '{"action_type":"simulate","simulate_action":{"action_type":"terminate","resource_id":"ebs-001"},"reasoning":"checking cascade risk"}'
+    terminate: '{"action_type":"terminate","resource_id":"ebs-001","reasoning":"idle 720 hrs, no dependents"}'
+    resize:    '{"action_type":"resize","resource_id":"ec2-t01","target_size":"t2.large","reasoning":"cpu 8%, sla_max 90%, safe to downsize"}'
+    reserve:   '{"action_type":"reserve","resource_id":"ec2-h01","reasoning":"always-on, 70% cpu, large cost"}'
+    noop:      '{"action_type":"noop","reasoning":"no safe actions remain"}'
+
+reward_function:
+  type: dense
+  range: [-1.0, 1.0]
+  components:
+    - {name: cost_reduction,        value: "0.0 to +0.50",    trigger: any cost-saving action}
+    - {name: idle_bonus,            value: "+0.10",            trigger: terminate cpu=0 idle resource}
+    - {name: strategy_bonus,        value: "+0.10",            trigger: reserve high-utilisation instance}
+    - {name: overprovisioned_bonus, value: "+0.10",            trigger: resize cpu<20% instance}
+    - {name: waste_penalty,         value: "-0.15",            trigger: terminate active non-critical resource}
+    - {name: sla_violation_penalty, value: "-0.20",            trigger: resize causes cpu > sla_max_cpu}
+    - {name: dependency_penalty,    value: "-0.20 each",       trigger: terminate resource with live dependents}
+    - {name: critical_penalty,      value: "-1.00",            trigger: terminate critical resource}
+    - {name: noop_penalty,          value: "-0.02",            trigger: noop action}
+    - {name: explainability_bonus,  value: "up to +0.05",      trigger: quality reasoning in grade}
+
+endpoints:
+  ws:       WS   /ws
+  reset:    POST /reset
+  step:     POST /step
+  state:    GET  /state
+  health:   GET  /health
+  grade:    GET  /grade
+  tasks:    GET  /tasks
+  simulate: POST /simulate
+  web:      GET  /web
+  docs:     GET  /docs
+
+deployment:
+  platform: huggingface-spaces
+  sdk: docker
+  port: 7860
+  hardware: cpu-basic
+  environment_variables: [API_BASE_URL, MODEL_NAME, OPENAI_API_KEY, HF_TOKEN]
