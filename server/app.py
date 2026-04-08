@@ -23,9 +23,9 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from typing import Optional
+from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Body
 from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from openenv.core.env_server import create_fastapi_app
 from pydantic import BaseModel
@@ -121,7 +121,7 @@ class ResetRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.post("/reset", tags=["env"])
-async def reset_episode(request_body: ResetRequest = ResetRequest()):
+async def reset_episode(request_body: Optional[ResetRequest] = Body(default=None)):
     """
     Start a new episode for the specified task.
 
@@ -137,8 +137,11 @@ async def reset_episode(request_body: ResetRequest = ResetRequest()):
     """
     env = _get_env()
     try:
-        # If task_id was not provided in JSON but object exists, use its default
-        task_id = request_body.task_id if request_body else "task1"
+        # If body is missing, request_body will be None
+        task_id = "task1"
+        if request_body and request_body.task_id:
+            task_id = request_body.task_id
+        
         obs = env.reset(task_id=task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
