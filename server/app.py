@@ -110,11 +110,6 @@ async def _sync_env_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
-# Build the base OpenEnv application
-# ---------------------------------------------------------------------------
-app = create_fastapi_app(CloudFinOpsEnvironment, FinOpsAction, FinOpsObservation)
-
-# ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
 
@@ -166,10 +161,7 @@ async def get_state_override(request: Request):
         return JSONResponse(content=state.dict())
 
 
-# ---------------------------------------------------------------------------
-# Route Priority — Reverse the routes list so our overrides win!
-# ---------------------------------------------------------------------------
-app.router.routes.reverse()
+# Route priority reversal is moved to the end of the file to ensure ALL overrides win.
 
 
 
@@ -241,18 +233,6 @@ async def simulate_action(request: Request):
         return JSONResponse(content=result.dict())
 
 
-# ---------------------------------------------------------------------------
-# /state - explicit override to preserve custom subclass fields
-# ---------------------------------------------------------------------------
-
-@app.get("/state", tags=["State Management"])
-async def get_state_override():
-    """Return the raw FinOpsState so extended fields like task_id aren't dropped."""
-    env = _get_env()
-    try:
-        return JSONResponse(content=env.state.model_dump())
-    except AttributeError:
-        return JSONResponse(content=env.state.dict())
 
 
 # ---------------------------------------------------------------------------
@@ -1010,4 +990,11 @@ initChart();
 async def web_ui():
     """Serve the interactive Cloud FinOps Optimizer Web UI."""
     return HTMLResponse(content=_WEB_UI)
+
+
+# ---------------------------------------------------------------------------
+# Route Priority — Reverse the routes list so our overrides win!
+# This MUST be the last action in the file.
+# ---------------------------------------------------------------------------
+app.router.routes.reverse()
 
