@@ -1,19 +1,15 @@
 ---
 title: Cloud FinOps Optimizer
-emoji: "\U0001F4B0"
+emoji: 💰
 colorFrom: blue
 colorTo: indigo
 sdk: docker
 pinned: false
 license: mit
 tags:
-  - openenv
-  - reinforcement-learning
-  - finops
-  - cloud-cost-optimization
-short_description: >
-  OpenEnv RL environment: AI agent learns to reduce cloud infrastructure
-  costs safely across three difficulty tasks.
+- openenv
+- RL
+short_description: OpenEnv cloud optimization environment.
 ---
 
 # Cloud FinOps Optimizer

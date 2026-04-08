@@ -398,7 +398,7 @@ class CloudFinOpsEnvironment(Environment):
     def grade(self) -> Dict[str, Any]:
         task_id = self._state.task_id
         if not task_id:
-            return {"score": 0.0, "reason": "No active episode."}
+            return {"score": 0.0001, "reason": "No active episode."}
         if task_id == "task1":
             result = self._grade_task1()
         elif task_id == "task2":
@@ -406,13 +406,18 @@ class CloudFinOpsEnvironment(Environment):
         elif task_id == "task3":
             result = self._grade_task3()
         else:
-            return {"score": 0.0, "reason": "Unknown task."}
+            return {"score": 0.0001, "reason": "Unknown task."}
 
         # Upgrade 4: explainability bonus (up to +0.05)
         result["explainability_score"] = self._score_reasoning()
-        result["score"] = round(
-            min(1.0, result["score"] + result["explainability_score"] * 0.05), 4
-        )
+        
+        # Calculate final score with bonus
+        final_score = result["score"] + (result["explainability_score"] * 0.05)
+        
+        # Phase 2 Strict Constraint: Score must be strictly between 0 and 1 (not 0 or 1).
+        # We clamp to [0.0001, 0.9999] to satisfy the (0, 1) range requirement.
+        result["score"] = round(max(0.0001, min(0.9999, final_score)), 4)
+        
         return result
 
     def _score_reasoning(self) -> float:
@@ -423,7 +428,7 @@ class CloudFinOpsEnvironment(Environment):
         """
         log = self._state.reasoning_log
         if not log:
-            return 0.0
+            return 0.0001
         total_words  = sum(len(r.split()) for r in log)
         keyword_hits = sum(
             1 for r in log
@@ -435,7 +440,9 @@ class CloudFinOpsEnvironment(Environment):
         coverage = min(1.0, len(log) / max(1, self._state.step_count / 3))
         depth    = min(1.0, total_words  / max(1, len(log) * 10))
         keywords = min(1.0, keyword_hits / max(1, len(log) * 2))
-        return round((coverage + depth + keywords) / 3.0, 4)
+        raw_score = (coverage + depth + keywords) / 3.0
+        
+        return round(max(0.0001, min(0.9999, raw_score)), 4)
 
     def _grade_task1(self) -> Dict[str, Any]:
         original     = _task1_resources()
