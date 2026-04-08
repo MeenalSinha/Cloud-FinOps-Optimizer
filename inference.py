@@ -37,20 +37,16 @@ from openai import OpenAI
 
 from client import FinOpsEnv, FinOpsAction
 
-# ---------------------------------------------------------------------------
 # Configuration — all read from environment variables per spec
-# ---------------------------------------------------------------------------
+API_BASE_URL = os.getenv("API_BASE_URL", "<your-active-api-base-url>")
+MODEL_NAME = os.getenv("MODEL_NAME", "<your-active-model-name>")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Docker image name if used
+# Optional - if you use from_docker_image():
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
-# API key: prefer HF_TOKEN (contest standard), fall back to API_KEY
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY", "")
-
-# API base URL: default to HF inference router (contest standard)
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-
-# Model name
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+# API key: prefer HF_TOKEN (contest standard), fall back to internal fallback if needed
+API_KEY = HF_TOKEN or os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY", "")
 
 # Benchmark / environment name used in [START] env= field
 BENCHMARK = "cloud-finops-optimizer"
