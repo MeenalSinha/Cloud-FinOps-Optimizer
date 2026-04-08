@@ -422,27 +422,46 @@ class CloudFinOpsEnvironment(Environment):
 
     def _score_reasoning(self) -> float:
         """
-        Score the quality of reasoning logged during the episode (0.0 – 1.0).
-        Rewards: reasoning present, mentions cost/SLA/dependency keywords,
-        length proportional to steps taken (agent was thinking, not just acting).
+        Advanced scoring logic for agent reasoning quality.
+        Recognizes keyword coverage, logical structure, and contextual awareness.
         """
         log = self._state.reasoning_log
         if not log:
-            return 0.0001
-        total_words  = sum(len(r.split()) for r in log)
-        keyword_hits = sum(
-            1 for r in log
-            for kw in ("cost", "sla", "depend", "cascade", "critical", "budget",
-                       "reserve", "resize", "terminate", "risk", "simulate")
-            if kw in r.lower()
-        )
-        # Normalise: at least 1 reasoning entry per 3 steps is good coverage
-        coverage = min(1.0, len(log) / max(1, self._state.step_count / 3))
-        depth    = min(1.0, total_words  / max(1, len(log) * 10))
-        keywords = min(1.0, keyword_hits / max(1, len(log) * 2))
-        raw_score = (coverage + depth + keywords) / 3.0
+            return 0.1  # Base score for valid but empty history
+            
+        import re
+        recent = log[-5:] # look at last 5 decisions
         
-        return round(max(0.01, min(0.99, raw_score)), 4)
+        keywords = {
+            "cost": 0.1, "waste": 0.1, "idle": 0.1,
+            "sla": 0.15, "breach": 0.15, "violation": 0.15,
+            "dependency": 0.15, "cascade": 0.15, "chain": 0.15,
+            "simulate": 0.15, "projected": 0.1, "safe": 0.1
+        }
+        
+        hits = 0.0
+        for text in recent:
+            text_lower = text.lower()
+            # 1. Keyword coverage
+            for kw, val in keywords.items():
+                if kw in text_lower:
+                    hits += val
+            
+            # 2. Justification markers (e.g., "because", "due to")
+            if re.search(r"(because|due|since|result|reason|why)", text_lower):
+                hits += 0.2
+            
+            # 3. Contextual markers (e.g., resource IDs like 'ec2-001')
+            if re.search(r"[a-z0-9]+-[a-z0-9]+", text_lower):
+                hits += 0.2
+                
+            # 4. Strategy markers
+            if "simulate" in text_lower and ("safe" in text_lower or "advice" in text_lower):
+                hits += 0.2
+        
+        # Average hits per logged reasoning
+        raw_score = 0.1 + (hits / len(recent))
+        return round(max(0.1, min(0.99, raw_score)), 4)
 
     def _grade_task1(self) -> Dict[str, Any]:
         original     = _task1_resources()
@@ -725,6 +744,20 @@ class CloudFinOpsEnvironment(Environment):
         cost = self._active_cost()
         desc = cfg.get("description", "")
         dep_graph, cascade_risks = self._build_dependency_graph()
+        
+        info = info or {
+            "episode_id":       self._state.episode_id,
+            "terminated_count": len(self._state.terminated_ids),
+            "reserved_count":   len(self._state.reserved_ids),
+            "resize_count":     len(self._state.resize_history),
+            "sla_violations":   self._state.sla_violation_history,
+        }
+        info["finops_metrics"] = {
+            "active_waste_count": sum(1 for r in self._resources if not r.critical and r.cpu_utilization == 0.0 and r.status != ResourceStatus.TERMINATED),
+            "at_risk_count":      sum(1 for r in self._resources if r.sla_status == SLAStatus.AT_RISK),
+            "violation_count":    sum(1 for r in self._resources if r.sla_status == SLAStatus.VIOLATED),
+            "total_savings_potential_hr": sum(r.cost_per_hour for r in self._resources if not r.critical and r.cpu_utilization < 20.0 and r.status != ResourceStatus.TERMINATED),
+        }
 
         return FinOpsObservation(
             done=done,
