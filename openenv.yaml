@@ -32,8 +32,7 @@ tasks:
       Dependency graph is present — do not break production chains.
     max_steps: 12
     budget_per_hour: 1.00
-    grader: deterministic
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
 
   - id: task2
     name: Resource Optimization with SLA
@@ -44,8 +43,7 @@ tasks:
       Dependency chain: batch-workers -> api-servers -> prod-apps.
     max_steps: 16
     budget_per_hour: 0.80
-    grader: deterministic
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
 
   - id: task3
     name: Strategic Planning — Full System
@@ -57,8 +55,7 @@ tasks:
       Bring total spend below $1.00/hr without SLA breaches.
     max_steps: 20
     budget_per_hour: 1.00
-    grader: deterministic
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
 
 unique_mechanics:
   - name: Dependency Graph (Upgrade 1)

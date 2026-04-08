@@ -16,7 +16,7 @@ Rules (from sample inference script spec):
     - done and success are lowercase booleans: true or false.
     - error is the raw last_action_error string, or null if none.
     - All fields on a single line with no newlines within a line.
-    - Each task must return score in [0, 1].
+    - Each task must return score in (0, 1).
 
 Mandatory environment variables:
     API_BASE_URL      The API endpoint for the LLM / environment server.
@@ -238,7 +238,7 @@ def _fetch_grade(base_url: str) -> Dict[str, Any]:
             return json.loads(r.read().decode())
     except Exception as exc:
         print(f"[DEBUG] grade fetch failed: {exc}", flush=True)
-        return {"score": 0.0, "error": str(exc)}
+        return {"score": 0.01, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +253,6 @@ def run_episode(env: Any, client: OpenAI, task_id: str) -> Dict[str, Any]:
     history:  List[str]   = []
     rewards:  List[float] = []   # per-step rewards — passed to log_end
     steps_taken = 0
-    score       = 0.0
     success     = False
 
     result      = env.reset(task_id=task_id)
@@ -339,7 +338,8 @@ def run_episode(env: Any, client: OpenAI, task_id: str) -> Dict[str, Any]:
 
     finally:
         grade   = _fetch_grade(API_BASE_URL)
-        score   = min(max(float(grade.get("score", 0.0)), 0.0), 1.0)
+        # Phase 2 Compliance: ensure inference script log is strictly (0, 1)
+        score   = min(max(float(grade.get("score", 0.01)), 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
         env.close()
 
