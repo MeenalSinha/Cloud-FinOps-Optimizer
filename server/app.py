@@ -48,10 +48,11 @@ def _env_factory():
 
 app = create_fastapi_app(_env_factory, FinOpsAction, FinOpsObservation)
 
-# Remove the framework's /reset and /state so our explicit overrides take effect
+# Remove the framework's /reset and /state so our explicit overrides take effect.
+# We use a more aggressive check to clear all variations of these paths.
 app.router.routes = [
     r for r in app.router.routes 
-    if getattr(r, "path", None) not in ("/reset", "/state")
+    if not (hasattr(r, "path") and (r.path == "/reset" or r.path == "/reset/" or r.path == "/state" or r.path == "/state/"))
 ]
 
 
@@ -149,8 +150,6 @@ async def reset_episode(request: Request):
 
     try:
         obs = env.reset(task_id=task_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
