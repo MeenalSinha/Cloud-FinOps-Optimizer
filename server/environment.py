@@ -399,17 +399,23 @@ class CloudFinOpsEnvironment(Environment):
         task_id = self._state.task_id
         if not task_id:
             return {"score": 0.01, "reason": "No active episode."}
+        
         if task_id == "task1":
             result = self._grade_task1()
         elif task_id == "task2":
             result = self._grade_task2()
         elif task_id == "task3":
             result = self._grade_task3()
-        # Calculate final score with bonus
-        final_score = result["score"] + (result["explainability_score"] * 0.05)
+        else:
+            return {"score": 0.01, "reason": f"Unknown task {task_id}"}
+            
+        # Calculate bonus score
+        expl_score = self._score_reasoning()
+        result["explainability_score"] = expl_score
         
         # Phase 2 Strict Constraint: Score must be strictly between 0 and 1 (not 0 or 1).
-        # Using a more aggressive clamp [0.01, 0.99] to be absolutely safe.
+        # We clamp the FINAL combined score here.
+        final_score = result["score"] + (expl_score * 0.05)
         result["score"] = round(max(0.01, min(0.99, final_score)), 4)
         
         return result

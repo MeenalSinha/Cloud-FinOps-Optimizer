@@ -99,8 +99,6 @@ async def _startup():
 async def _sync_env_middleware(request: Request, call_next):
     global _env
     response = await call_next(request)
-    
-    # 1. Sync env if framework changed it
     if request.url.path in ("/step",):
         try:
             fw_env = app.state.env
@@ -108,48 +106,6 @@ async def _sync_env_middleware(request: Request, call_next):
                 _env = fw_env
         except AttributeError:
             pass
-            
-    # 2. GLOBAL SCORE CLAMP: Ensure any "score" field in ANY JSON response is strictly (0, 1)
-    # Exclude admin/UI paths to prevent 500s or performance issues
-    if request.url.path in ("/web", "/docs", "/openapi.json", "/health"):
-        return response
-
-    if "application/json" in response.headers.get("content-type", ""):
-        try:
-            import json
-            body_parts = []
-            async for chunk in response.body_iterator:
-                body_parts.append(chunk)
-            body_data = b"".join(body_parts)
-            
-            if body_data:
-                content = json.loads(body_data)
-                
-                def clamp_scores(obj):
-                    if isinstance(obj, dict):
-                        for k, v in obj.items():
-                            if k == "score" and isinstance(v, (int, float)):
-                                obj[k] = round(max(0.05, min(0.95, float(v))), 4)
-                            else:
-                                clamp_scores(v)
-                    elif isinstance(obj, list):
-                        for item in obj:
-                            clamp_scores(item)
-                
-                clamp_scores(content)
-                
-                # REBUILD HEADERS: Must remove content-length so JSONResponse can recalculate it
-                new_headers = dict(response.headers)
-                new_headers.pop("content-length", None)
-                
-                return JSONResponse(
-                    content=content,
-                    status_code=response.status_code,
-                    headers=new_headers
-                )
-        except Exception:
-            pass # Fallback to original response on any failure
-
     return response
 
 
