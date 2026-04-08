@@ -110,55 +110,67 @@ async def _sync_env_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
+# Build the base OpenEnv application
+# ---------------------------------------------------------------------------
+app = create_fastapi_app(CloudFinOpsEnvironment, FinOpsAction, FinOpsObservation)
+
+# ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
 
 class ResetRequest(BaseModel):
-    task_id: str = "task1"
+    task_id: Optional[str] = "task1"
+    seed: Optional[int] = None
+    episode_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
-# /reset -- explicit override so task_id is always forwarded from body
+# Overrides — We add these LATER and will reverse the routes list to
+# ensure they are checked first by Starlette.
 # ---------------------------------------------------------------------------
 
 @app.post("/reset", tags=["env"])
 async def reset_episode(request: Request):
     """
     Start a new episode for the specified task.
-
-    Body:
-        {"task_id": "task1"}   easy   -- Waste Cleanup
-        {"task_id": "task2"}   medium -- Resource Optimization
-        {"task_id": "task3"}   hard   -- Strategic Planning
-
-    If the body is missing, empty, or not JSON, defaults to task1.
-
-    Returns a FinOpsObservation with full resource list, dependency graph,
-    SLA status, and the episode goal.
+    Defaults to task1 if no JSON body or task_id provided.
     """
-    env = _get_env()
-    
-    # Manually parse task_id from body if it exists
     task_id = "task1"
     try:
         body = await request.json()
         if body and isinstance(body, dict):
             task_id = body.get("task_id", "task1")
     except Exception:
-        # If body is missing or not JSON, we just fall back to task1
         pass
 
+    env = getattr(request.state, "env", None) or _env
     try:
         obs = env.reset(task_id=task_id)
-    except ValueError as exc:
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Serialize -- FinOpsObservation is a Pydantic model
     try:
         return JSONResponse(content=obs.model_dump())
     except AttributeError:
-        # Pydantic v1 fallback
         return JSONResponse(content=obs.dict())
+
+
+@app.get("/state", tags=["env"])
+async def get_state_override(request: Request):
+    """Return the current episode state."""
+    env = getattr(request.state, "env", None) or _env
+    state = env.state
+    try:
+        return JSONResponse(content=state.model_dump())
+    except AttributeError:
+        return JSONResponse(content=state.dict())
+
+
+# ---------------------------------------------------------------------------
+# Route Priority — Reverse the routes list so our overrides win!
+# ---------------------------------------------------------------------------
+app.router.routes.reverse()
+
 
 
 # ---------------------------------------------------------------------------

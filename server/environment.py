@@ -321,7 +321,9 @@ class CloudFinOpsEnvironment(Environment):
     # OpenEnv interface
     # ------------------------------------------------------------------
 
-    def reset(self, task_id: str = "task1", episode_id: str = None, **kwargs) -> FinOpsObservation:
+    def reset(self, seed: Optional[int] = None, episode_id: Optional[str] = None, **kwargs) -> FinOpsObservation:
+        # Extract task_id from kwargs if provided, otherwise default to task1
+        task_id = kwargs.get("task_id", "task1")
         if task_id not in TASK_CONFIGS:
             raise ValueError(f"Unknown task_id '{task_id}'. Choose from: {list(TASK_CONFIGS)}")
 
