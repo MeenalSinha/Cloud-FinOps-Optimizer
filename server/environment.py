@@ -398,25 +398,19 @@ class CloudFinOpsEnvironment(Environment):
     def grade(self) -> Dict[str, Any]:
         task_id = self._state.task_id
         if not task_id:
-            return {"score": 0.0001, "reason": "No active episode."}
+            return {"score": 0.01, "reason": "No active episode."}
         if task_id == "task1":
             result = self._grade_task1()
         elif task_id == "task2":
             result = self._grade_task2()
         elif task_id == "task3":
             result = self._grade_task3()
-        else:
-            return {"score": 0.0001, "reason": "Unknown task."}
-
-        # Upgrade 4: explainability bonus (up to +0.05)
-        result["explainability_score"] = self._score_reasoning()
-        
         # Calculate final score with bonus
         final_score = result["score"] + (result["explainability_score"] * 0.05)
         
         # Phase 2 Strict Constraint: Score must be strictly between 0 and 1 (not 0 or 1).
-        # We clamp to [0.0001, 0.9999] to satisfy the (0, 1) range requirement.
-        result["score"] = round(max(0.0001, min(0.9999, final_score)), 4)
+        # Using a more aggressive clamp [0.01, 0.99] to be absolutely safe.
+        result["score"] = round(max(0.01, min(0.99, final_score)), 4)
         
         return result
 
@@ -442,7 +436,7 @@ class CloudFinOpsEnvironment(Environment):
         keywords = min(1.0, keyword_hits / max(1, len(log) * 2))
         raw_score = (coverage + depth + keywords) / 3.0
         
-        return round(max(0.0001, min(0.9999, raw_score)), 4)
+        return round(max(0.01, min(0.99, raw_score)), 4)
 
     def _grade_task1(self) -> Dict[str, Any]:
         original     = _task1_resources()
