@@ -32,6 +32,9 @@ dependencies = [
     "websockets>=12.0",
 ]
 
+[project.scripts]
+server = "server.app:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
@@ -40,7 +43,4 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["cloud_finops_env*"]
-
-[project.scripts]
-server = "server.app:main"
+include = ["server", "server.*"]
