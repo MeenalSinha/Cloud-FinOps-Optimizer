@@ -980,7 +980,22 @@ async def web_ui():
 
 # ---------------------------------------------------------------------------
 # Route Priority — Reverse the routes list so our overrides win!
-# This MUST be the last action in the file.
+# This MUST be the last action in the file before the entry point.
 # ---------------------------------------------------------------------------
 app.router.routes.reverse()
+
+
+# ---------------------------------------------------------------------------
+# Entry point for direct execution
+# ---------------------------------------------------------------------------
+def main():
+    import uvicorn
+    import os
+    port = int(os.environ.get("PORT", 7860))
+    host = os.environ.get("HOST", "0.0.0.0")
+    workers = int(os.environ.get("WORKERS", 1))
+    uvicorn.run("server.app:app", host=host, port=port, workers=workers)
+
+if __name__ == "__main__":
+    main()
 

@@ -43,4 +43,4 @@ where = ["."]
 include = ["cloud_finops_env*"]
 
 [project.scripts]
-finops-server = "server.app:app"
+server = "server.app:main"
