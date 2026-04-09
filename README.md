@@ -63,21 +63,12 @@ The agent selects one action per step. All actions serialize to a JSON object.
 | Action    | Description                                      | Required fields                          |
 |-----------|--------------------------------------------------|------------------------------------------|
 | terminate | Delete an idle or unused resource                | resource_id                              |
-| resize    | Downgrade an over-provisioned EC2 instance       | resource_id, target_size                 |
+| resize    | Downgrade an EC2 instance (target must be smaller)| resource_id, target_size                 |
 | reserve   | Apply 40% reserved-instance discount             | resource_id                              |
-| noop      | Take no action (small negative reward)           | none                                     |
+| simulate  | **[Premium]** Preview outcome without acting     | simulate_action (Dict)                   |
+| noop      | Take no action                                   | none                                     |
 
-Valid instance sizes (smallest to largest):
-`t2.micro` `t2.small` `t2.medium` `t2.large` `t2.xlarge` `t2.2xlarge`
-
-Example actions:
-
-```json
-{"action_type": "terminate", "resource_id": "ebs-001"}
-{"action_type": "resize",    "resource_id": "ec2-t01", "target_size": "t2.medium"}
-{"action_type": "reserve",   "resource_id": "ec2-h01"}
-{"action_type": "noop"}
-```
+> **Note on Reasoning:** Every action accepts an optional `reasoning` field. High-quality justifications significantly improve the episode grade.
 
 ---
 
@@ -87,89 +78,56 @@ Each step returns a `FinOpsObservation` with the following fields:
 
 | Field                | Type            | Description                                   |
 |----------------------|-----------------|-----------------------------------------------|
-| done                 | bool            | Whether the episode has ended                 |
-| reward               | float or null   | Reward for the last action                    |
-| resources            | list            | All CloudResource objects in the environment  |
-| total_cost_per_hour  | float           | Current total hourly cost (active resources)  |
-| budget_per_hour      | float           | Budget target                                 |
-| budget_remaining     | float           | budget_per_hour minus total_cost_per_hour     |
-| task_id              | str             | Active task identifier                        |
-| task_description     | str             | Human-readable task objective                 |
-| step_count           | int             | Steps taken in this episode                   |
-| max_steps            | int             | Step budget for this task                     |
-| info                 | dict            | Auxiliary information                         |
+| total_cost_per_hour  | float           | Current total hourly spend                    |
+| budget_remaining     | float           | Headroom before reaching budget limit         |
+| **dependency_graph** | dict            | Full resource dependency map                  |
+| **cascading_risks**  | list            | Resources at risk if a dependency is cut      |
+| **sla_violations**   | list            | Resources currently breaching performance SLAs|
+| **simulate_result**  | object          | Outcome data from the last `simulate` action  |
+| **info.finops_metrics**| dict          | Pre-calculated waste & savings potential      |
 
-Each `CloudResource` has:
+Each `CloudResource` has advanced metadata:
 
 | Field              | Type            | Description                                    |
 |--------------------|-----------------|------------------------------------------------|
-| id                 | str             | Unique resource identifier                     |
-| name               | str             | Human-readable name                            |
-| type               | str             | ec2 / ebs / s3 / rds                          |
-| instance_size      | str or null     | EC2 size (t2.micro ... t2.2xlarge)             |
-| cpu_utilization    | float           | CPU usage 0.0-100.0                            |
-| cost_per_hour      | float           | Current hourly cost in USD                     |
-| status             | str             | running / idle / terminated                    |
-| critical           | bool            | Mission-critical — must not be terminated      |
-| reserved           | bool            | Whether reserved pricing is active             |
-| idle_hours         | int             | Hours since last active use                    |
-| dependency_ids     | list[str]       | IDs of resources that depend on this one       |
+| sla_max_cpu        | float           | CPU threshold (breached during resizes)        |
+| sla_status         | str             | ok / at_risk / violated                        |
+| cooldown_steps     | int             | Steps remaining for a resize to take effect    |
 
 ---
 
 ## Reward Function
 
-Rewards are dense — every step provides a meaningful signal.
-
 | Component           | Value           | Trigger                                           |
 |---------------------|-----------------|---------------------------------------------------|
-| cost_reduction      | 0.0 – +0.50     | Any action that lowers hourly cost                |
-| idle_bonus          | +0.10           | Terminating a cpu=0 resource with high idle_hours |
-| strategy_bonus      | +0.10           | Reserving a high-cost, high-utilization instance  |
-| waste_penalty       | -0.15           | Terminating an actively used non-critical resource|
-| dependency_penalty  | -0.20 each      | Breaking a running resource's dependency          |
-| critical_penalty    | -1.00           | Terminating a mission-critical resource           |
-| noop_penalty        | -0.02           | Selecting the noop action                         |
-
-All rewards are clipped to [-1.0, 1.0].
+| cost_reduction      | +0.1 to +0.5    | Lowering hourly spend                             |
+| sla_penalty         | -0.20           | Violating a resource's performance SLA            |
+| cascade_penalty     | -0.20 per dep   | Breaking a dependency chain                       |
+| reasoning_bonus     | (in grade)      | High-quality, justifiable decisions               |
+| failure_penalty     | -1.00           | Terminating critical nodes or massive outages     |
 
 ---
 
 ## Tasks
 
 ### Task 1 — Waste Cleanup (Easy)
+Identify and terminate the 4 idle resources hidden among active ones. Focus on `cpu_utilization == 0.0`.
 
-Terminate all idle EBS volumes and S3 buckets (cpu_utilization == 0,
-idle_hours > 0). Four wasteful resources exist among eight total. Critical
-resources must not be terminated.
+### Task 2 — Performance-Aware Rightsizing (Medium)
+Downsize 5 over-provisioned EC2 instances. **Challenge**: Resizing too aggressively will breach `sla_max_cpu` constraints.
 
-- Budget: $1.00/hr — Max steps: 12
-- Grader: `score = (correctly_terminated / total_waste) - 0.25 * critical_terminated`
-- Optimal score: 1.00
+### Task 3 — Fleet-Wide Tactical Strategy (Hard)
+Execute a multi-stage plan: terminate waste, reserve high-load servers, and right-size others while managing **Temporal Cooldowns** (actions take time to stabilize). 
 
-### Task 2 — Resource Optimization (Medium)
+---
 
-Resize over-provisioned EC2 instances (cpu_utilization < 20%) to at least
-one smaller instance tier. Five of eight instances are over-provisioned.
-Two are critical production servers that must not be terminated.
+## Grader Quality & Explainability
 
-- Budget: $0.80/hr — Max steps: 16
-- Grader: `score = (correctly_resized / overprovisioned_count) - 0.25 * critical_terminated`
-- Optimal score: 1.00
+Each task includes an **Episode Grader** that returns a score in the strict `(0.01, 0.99)` range.
 
-### Task 3 — Strategic Planning (Hard)
-
-Apply reserved pricing and terminate idle resources to bring total hourly
-spend below $1.00/hr across a ten-resource mixed environment. Optimal
-strategy requires combining multiple action types.
-
-- Budget: $1.00/hr — Max steps: 20
-- Grader: proportional to cost reduction toward budget target; full score
-  only when under budget; penalty for critical terminations
-- Optimal score: 1.00
-
-All graders are fully deterministic. Same agent behavior always produces
-the same score.
+The final score is composed of:
+1.  **Task Success (90%)**: Absolute cost reduction and SLA compliance.
+2.  **Explainability Bonus (10%)**: The agent's `reasoning` is evaluated for keyword depth, logical structure ("Because X, I did Y"), and contextual awareness of resource IDs.
 
 ---
 
