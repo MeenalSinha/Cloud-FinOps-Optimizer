@@ -37,9 +37,9 @@ from openai import OpenAI
 
 from client import FinOpsEnv, FinOpsAction
 
-# Configuration — all read from environment variables per spec
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+# Configuration — updated to match sample script defaults exactly
+API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
+MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 if not HF_TOKEN:
@@ -91,16 +91,17 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     """
-    [END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
+    [END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
     One line after env.close(), always emitted even on exception.
     - success: lowercase boolean string
+    - score: 3 decimal places (per sample script)
     - rewards: comma-separated per-step rewards, each at 2 decimal places
     """
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -344,7 +345,7 @@ def run_episode(env: Any, client: OpenAI, task_id: str) -> Dict[str, Any]:
         env.close()
 
         # ── [END] — always emitted, even on exception ─────────────────────
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
     print(
         f"  Score: {score:.4f}  |  "
