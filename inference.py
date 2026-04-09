@@ -38,15 +38,16 @@ from openai import OpenAI
 from client import FinOpsEnv, FinOpsAction
 
 # Configuration — all read from environment variables per spec
-API_BASE_URL = os.getenv("API_BASE_URL", "<your-active-api-base-url>")
-MODEL_NAME = os.getenv("MODEL_NAME", "<your-active-model-name>")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Optional - if you use from_docker_image():
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+if not HF_TOKEN:
+    print("ERROR: HF_TOKEN environment variable is required", file=sys.stderr)
+    sys.exit(1)
 
-# API key: prefer HF_TOKEN (contest standard), fall back to internal fallback if needed
-API_KEY = HF_TOKEN or os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY", "")
+# API key: per guidelines, we use HF_TOKEN as the API key
+API_KEY = HF_TOKEN
 
 # Benchmark / environment name used in [START] env= field
 BENCHMARK = "cloud-finops-optimizer"
@@ -90,17 +91,16 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     """
-    [END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
+    [END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
     One line after env.close(), always emitted even on exception.
-    - success: lowercase boolean string, based on score >= SUCCESS_SCORE_THRESHOLD
-    - score: 3 decimal places
+    - success: lowercase boolean string
     - rewards: comma-separated per-step rewards, each at 2 decimal places
     """
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
         flush=True,
     )
 
@@ -344,7 +344,7 @@ def run_episode(env: Any, client: OpenAI, task_id: str) -> Dict[str, Any]:
         env.close()
 
         # ── [END] — always emitted, even on exception ─────────────────────
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
     print(
         f"  Score: {score:.4f}  |  "
@@ -366,10 +366,6 @@ def run_episode(env: Any, client: OpenAI, task_id: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    if not API_KEY:
-        print("ERROR: HF_TOKEN (or API_KEY / OPENAI_API_KEY) is not set.", file=sys.stderr)
-        sys.exit(1)
-
     print("Cloud FinOps Optimizer — Baseline Inference", flush=True)
     print(f"  Server : {API_BASE_URL}", flush=True)
     print(f"  Model  : {MODEL_NAME}", flush=True)
